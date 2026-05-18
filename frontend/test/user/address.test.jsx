@@ -1,0 +1,192 @@
+import { Route, Routes } from "react-router"
+import { beforeEach, describe, expect, test } from "vitest"
+import { findByAltText, fireEvent, screen, waitFor } from "@testing-library/react"
+import userEvent from '@testing-library/user-event';
+import Nav from "../../src/components/Nav";
+import Login from "../../src/pages/Login";
+import Profile from "../../src/pages/Profile";
+import AddressManager from "../../src/pages/User/AddressManager";
+import { render } from "../test-utils";
+import { updateTestResult } from "../../src/utils/updateSheets";
+
+
+describe('feature: Vendor Products', () => {
+    let emailInput
+    let passwordInput
+    let loginButton
+    let loginPageButton
+    const user  = userEvent.setup()
+    beforeEach(async () => {
+        render(
+            <Routes>
+                <Route element={<Nav />} >
+                    <Route path="/" element={<Login />} />
+                    <Route path="/profile" element={<Profile />} />
+                    <Route path="/address" element={<AddressManager/>}/>
+                </Route>
+            </Routes>
+        )
+        emailInput = screen.getByPlaceholderText(/esteban_schiller@gmail.com/i)
+        passwordInput = screen.getByPlaceholderText(/••••••/i)
+        loginButton = screen.getByRole("button", { name: /sign in/i })
+
+        fireEvent.change(emailInput, { target: { value: `demo@gmail.com` } })
+        fireEvent.change(passwordInput, { target: { value: "demo@123" } })
+        fireEvent.click(loginButton)
+        const welcomeText = await screen.findAllByText(/login successful/i)
+        expect(welcomeText[0])
+
+        screen.debug()
+        const profile = await screen.findByAltText('profile')
+        fireEvent.click(profile)
+
+        const profileTexts = await screen.findAllByText(/profile/i)
+        expect(profileTexts[0])
+
+        fireEvent.click(profileTexts[0])
+
+        const addressText = await screen.findByText(/address/i)
+        expect(addressText)
+        await user.click(addressText, { pointerEventsCheck: 0 })
+    })
+
+    
+    test('Scenario: User can view addresses', async () => {
+        try {
+            const myAddressesText = await screen.findByText(/My Addresses/i)
+            expect(myAddressesText)
+            await updateTestResult('TC_USER_01', 'pass')
+        } catch (error) {
+            await updateTestResult('TC_USER_01', 'fail')
+        }
+    })
+
+
+    
+
+    test('Scenario: User can add a new address', async () => {
+        try {
+            const myAddressesText = await screen.findByText(/My Addresses/i)
+            expect(myAddressesText)
+    
+            const addAddressButton = await screen.findByRole('button', { name: /add-btn/i })
+            await user.click(addAddressButton, { pointerEventsCheck: 0 })
+    
+            const addNewAddressText = await screen.findAllByText(/Add New Address/i)
+            expect(addNewAddressText[1])
+            const nameInput = await screen.findByPlaceholderText(/Full Name/i)
+            expect(nameInput)
+            fireEvent.change(nameInput, { target: { value: "John Doe" } })
+    
+            const phoneInput = await screen.findByPlaceholderText(/Phone Number/i)
+            expect(phoneInput)
+            fireEvent.change(phoneInput, { target: { value: "123-456-7890" } })
+    
+            const addressInput = await screen.findByPlaceholderText(/Street Address/i)
+            expect(addressInput)
+            fireEvent.change(addressInput, { target: { value: "123 Main St, Springfield" } })
+    
+            const cityInput = await screen.findByPlaceholderText(/City/i)
+            expect(cityInput)
+            fireEvent.change(cityInput, { target: { value: "Springfield" } })
+    
+            const stateInput = await screen.findByPlaceholderText(/State/i)
+            expect(stateInput)
+            fireEvent.change(stateInput, { target: { value: "IL" } })
+    
+            const zipCodeInput = await screen.findByPlaceholderText(/postal Code/i)
+            expect(zipCodeInput)
+            fireEvent.change(zipCodeInput, { target: { value: "627054" } })
+    
+            const homeTypeRadio = await screen.findByRole('radio', { name: /home/i })
+            expect(homeTypeRadio)
+            fireEvent.click(homeTypeRadio)
+    
+    
+            const defaultCheckbox = await screen.findByRole('checkbox', { name: /set as default address/i })
+            expect(defaultCheckbox)
+            fireEvent.click(defaultCheckbox)
+    
+    
+            const saveButton = await screen.findByRole('button', { name: /save/i })
+            expect(saveButton)
+            fireEvent.click(saveButton)
+            await updateTestResult('TC_USER_02', 'pass')
+        } catch (error) {
+            await updateTestResult('TC_USER_02', 'fail')
+        }
+    })
+
+    test('should delete the first address', async () => { 
+        try {
+            const myAddressesText = await screen.findByText(/My Addresses/i)
+            expect(myAddressesText)
+            const dltBtn = await screen.findAllByRole('button', {name: /delt-btn/i})
+            expect(dltBtn[0])
+    
+            await user.click(dltBtn[0])
+    
+            const dltMessage = await screen.findByText(/Address deleted/)
+            expect(dltMessage)
+            await updateTestResult('TC_USER_03', 'pass')
+        } catch (error) {
+            await updateTestResult('TC_USER_03', 'fail')
+        }
+
+     })
+
+     test('should edit the first address' , async () => {
+        try {
+            const myAddressesText = await screen.findByText(/My Addresses/i)
+            expect(myAddressesText)
+            const editBtns = await screen.findAllByRole('button', {name: /edit-btn/i})
+            expect(editBtns[0])
+    
+            await user.click(editBtns[0])
+    
+            const editAddressText = await screen.findByText(/Edit Address/)
+            expect(editAddressText)
+    
+            const nameInput = await screen.findByPlaceholderText(/Full Name/i)
+            expect(nameInput)
+            fireEvent.change(nameInput, { target: { value: "RandomEdit1" } })
+    
+            const phoneInput = await screen.findByPlaceholderText(/Phone Number/i)
+            expect(phoneInput)
+            fireEvent.change(phoneInput, { target: { value: "1111111" } })
+    
+            const addressInput = await screen.findByPlaceholderText(/Street Address/i)
+            expect(addressInput)
+            fireEvent.change(addressInput, { target: { value: "Random street" } })
+    
+            const cityInput = await screen.findByPlaceholderText(/City/i)
+            expect(cityInput)
+            fireEvent.change(cityInput, { target: { value: "Springfield" } })
+    
+            const stateInput = await screen.findByPlaceholderText(/State/i)
+            expect(stateInput)
+            fireEvent.change(stateInput, { target: { value: "UAE" } })
+    
+            const zipCodeInput = await screen.findByPlaceholderText(/postal Code/i)
+            expect(zipCodeInput)
+            fireEvent.change(zipCodeInput, { target: { value: "11111" } })
+    
+            const homeTypeRadio = await screen.findByRole('radio', { name: /home/i })
+            expect(homeTypeRadio)
+            fireEvent.click(homeTypeRadio)
+    
+    
+            const defaultCheckbox = await screen.findByRole('checkbox', { name: /set as default address/i })
+            expect(defaultCheckbox)
+            fireEvent.click(defaultCheckbox)
+    
+            const saveButton = await screen.findByRole('button', { name: /save/i })
+            expect(saveButton)
+            fireEvent.click(saveButton)
+            await updateTestResult('TC_USER_04', 'pass')
+        } catch (error) {
+            await updateTestResult('TC_USER_04', 'fail')
+        }
+     })
+
+})

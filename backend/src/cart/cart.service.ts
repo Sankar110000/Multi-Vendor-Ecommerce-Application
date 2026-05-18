@@ -1,0 +1,401 @@
+import {
+  Injectable,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { CouponsService } from 'src/coupon/coupon.service';
+import { Repository } from 'typeorm';
+import { CartItem } from './cart_items.entity';
+import { Cart } from './cart.entity';
+import { Product } from 'src/product/product.entity';
+import { ProductVariant } from 'src/product/productVariant.entity';
+
+@Injectable()
+export class CartService {
+  constructor(
+    @InjectRepository(Cart)
+    private readonly cartRepo: Repository<Cart>,
+    @InjectRepository(Product)
+    private readonly productRepo: Repository<Product>,
+    @InjectRepository(ProductVariant)
+    private readonly productVariantRepo: Repository<ProductVariant>,
+    @InjectRepository(CartItem)
+    private cartItemsRepo: Repository<CartItem>,
+    private readonly couponsService: CouponsService,
+  ) { }
+
+  async getMyCart(userId: number) {
+    const cart = await this.cartRepo.findOne({
+      where: { user: { id: userId } },
+      relations: ['cartItems', 'cartItems.product','cartItems.variant' ,'coupon', 'coupon.products', 'coupon.vendor'],
+    });
+
+    const subTotal =
+      cart?.cartItems.reduce((sum, item) => {
+        return sum + item.variant.price * item.quantity;
+      }, 0) || 0;
+
+
+    let discount = cart?.discount || 0;
+    let totalAmount = subTotal;
+    let discountedAmount = subTotal - discount;
+    if (totalAmount < 0) totalAmount = 0;
+
+    if (cart) {
+      cart.totalAmount = totalAmount;
+      cart.discountedAmount = discountedAmount;
+
+      await this.cartRepo.save(cart);
+    }
+
+    return {
+      success: true,
+      cart: {
+        ...cart,
+        items: cart?.cartItems,
+        subTotal,
+        total: cart?.discountedAmount,
+      },
+    };
+  }
+
+  /**
+   * Add or Increment Item in Cart
+   */
+  async addToCart(userId: number, productId: string, productVariantId: string, quantity: number = 1) {
+    let cart = await this.cartRepo.findOne({
+      where: {
+        user: { id: userId },
+      },
+    });
+
+
+    if (!cart) {
+      cart = this.cartRepo.create({ user: { id: userId } });
+      await this.cartRepo.save(cart);
+    }
+
+    const product = await this.productRepo.findOne({
+      where: { id: productId },
+    });
+
+    const variant = await this.productVariantRepo.findOne({
+      where: { id: productVariantId },
+    });
+
+    if (!variant) {
+      throw new NotFoundException('Product variant not found')
+    }
+
+    const productStock = variant?.stock;
+
+    if (!product) return { message: 'Product not found', success: false };
+    if (productStock && productStock < 1) {
+      return { message: 'Product is out of stock', success: false };
+    }
+
+    let cartItem = await this.cartItemsRepo.findOne({
+      where: { cart: { id: cart.id }, product: { id: productId } },
+    });
+    if (cartItem) {
+      cartItem.quantity += 1;
+    } else {
+      cartItem = this.cartItemsRepo.create({
+        product: { id: productId },
+        variant: {id: productVariantId},
+        cart: { id: cart.id },
+        quantity,
+      });
+    }
+    variant.stock -= 1;
+
+    await this.productRepo.save(product);
+    await this.productVariantRepo.save(variant);
+    const saevdCartItem = await this.cartItemsRepo.save(cartItem);
+    return this.getMyCart(userId);
+  }
+
+  /**
+   * Update Quantity using Product ID (Frontend Friendly)
+   */
+  async updateQuantityByProduct(
+    userId: number,
+    productId: string,
+    productVariantId: string,
+    quantity: number,
+  ) {
+    const cart = await this.cartRepo.findOne({
+      where: { user: { id: userId } },
+      relations: ['cartItems', 'cartItems.product','cartItems.variant' ,'cartItems.product.vendor', 'coupon', 'coupon.products', 'coupon.vendor'],
+    });
+
+    if (!cart) {
+      throw new NotFoundException('Cart not found')
+    }
+
+    let cartItem = await this.cartItemsRepo.findOne({
+      where: { cart: { id: cart?.id }, product: { id: productId } },
+    });
+
+    if (!cartItem) {
+      throw new NotFoundException('Cart item not found');
+    }
+
+    const product = await this.productRepo.findOne({
+      where: { id: productId },
+    });
+    if (!product) {
+      return { message: 'Product not found', success: false };
+    }
+
+    const variant = await this.productVariantRepo.findOne({
+      where: { id: productVariantId },
+    });
+
+    if (!variant) {
+      throw new NotFoundException('Product variant not found')
+    }
+    const productStock = variant?.stock;
+
+    if (quantity < 1) {
+      cartItem.quantity = 1;
+    }
+    if (cartItem?.quantity > quantity) {
+      variant.stock = productStock + 1;
+    } else {
+      variant.stock = productStock - 1;
+    }
+
+    cartItem.quantity = quantity;
+
+    // Sync updated quantity into the in-memory cart items for accurate discount calculation
+    const cartItemIndex = cart.cartItems.findIndex(ci => ci.product.id === productId);
+    if (cartItemIndex !== -1) {
+      cart.cartItems[cartItemIndex].quantity = quantity;
+    }
+
+    if (cart.coupon) {
+      const coupon = cart.coupon;
+
+      const totalAmount = cart.cartItems.reduce((acc, item) => {
+        return acc + item.quantity * item.variant.price
+      }, 0)
+
+      // Determine which items the coupon applies to based on scope
+      let validItems: any[] = [];
+      if (coupon.scope === 'global') {
+        validItems = cart.cartItems;
+      } else if (coupon.scope === 'vendor' && coupon.vendor) {
+        validItems = cart.cartItems.filter(item =>
+          item.product.vendor && item.product.vendor.id === coupon.vendor.id
+        );
+      } else if (coupon.scope === 'product') {
+        const couponProductIds = (coupon.products || []).map(p => p.id);
+        validItems = cart.cartItems.filter(item =>
+          couponProductIds.includes(item.product.id)
+        );
+      }
+
+      if (validItems.length > 0) {
+        let discount = 0;
+
+        const eligibleSubtotal = validItems.reduce((sum, item) => {
+          return sum + item.quantity * Number(item.variant.price);
+        }, 0);
+
+        if (coupon.type === 'percentage') {
+          discount = (eligibleSubtotal * Number(coupon.discountValue)) / 100;
+        } else {
+          discount = Number(coupon.discountValue);
+        }
+
+        // Cap discount at max discount amount if set
+        if (coupon.maxDiscountAmount && discount > coupon.maxDiscountAmount) {
+          discount = coupon.maxDiscountAmount;
+        }
+
+        discount = Math.min(discount, totalAmount);
+
+        cart.discount = discount;
+        cart.discountedAmount = totalAmount - discount;
+
+        await this.cartRepo.save(cart)
+      }
+    }
+
+    await this.productRepo.save(product);
+    await this.cartItemsRepo.save(cartItem);
+    return this.getMyCart(userId);
+  }
+
+  async removeItemByProduct(userId: number, productId: string, productVariantId: string) {
+    const cart = await this.cartRepo.findOne({
+      where: { user: { id: userId } },
+      relations: ['coupon', 'coupon.products', 'coupon.vendor', 'cartItems', 'cartItems.product', 'cartItems.product.vendor'],
+    });
+
+    if (!cart) {
+      throw new Error("Cart not found");
+    }
+
+    // If a coupon is applied, check if removing this product invalidates the coupon
+    if (cart.coupon) {
+      const coupon = cart.coupon;
+      let shouldRemoveCoupon = false;
+
+      if (coupon.scope === 'product') {
+        // Check if this was the only eligible product in the cart
+        const couponProductIds = (coupon.products || []).map(p => p.id);
+        const remainingEligible = cart.cartItems.filter(item =>
+          item.product.id !== productId && couponProductIds.includes(item.product.id)
+        );
+        if (remainingEligible.length === 0) {
+          shouldRemoveCoupon = true;
+        }
+      } else if (coupon.scope === 'vendor' && coupon.vendor) {
+        // Check if this was the only item from this vendor
+        const remainingVendorItems = cart.cartItems.filter(item =>
+          item.product.id !== productId &&
+          item.product.vendor && item.product.vendor.id === coupon.vendor.id
+        );
+        if (remainingVendorItems.length === 0) {
+          shouldRemoveCoupon = true;
+        }
+      }
+      // Global coupons stay unless cart becomes empty (handled naturally)
+
+      if (shouldRemoveCoupon) {
+        cart.coupon = null;
+        cart.discount = 0;
+        cart.discountedAmount = cart.totalAmount;
+        await this.cartRepo.save(cart);
+      }
+    }
+
+    const cartItem = await this.cartItemsRepo.findOne({
+      where: { cart: { id: cart?.id }, product: { id: productId } },
+    });
+    if (!cartItem) {
+      throw new NotFoundException('Cartitems not found');
+    }
+
+    const product = await this.productRepo.findOne({
+      where: { id: productId },
+    });
+    if (!product) {
+      throw new NotFoundException('Product not found');
+    }
+
+    const variant = await this.productVariantRepo.findOne({
+      where: { id: productVariantId },
+    });
+    if (!variant) {
+      throw new NotFoundException('Product variant not found');
+    }
+
+    let updatedStock = cartItem.quantity + variant.stock;
+    variant.stock = updatedStock;
+    await this.productVariantRepo.save(variant);
+
+    const result = await this.cartItemsRepo.delete({
+      product: productId as any,
+      cart: cart?.id as any,
+    });
+    if (result.affected === 0) {
+      throw new NotFoundException('Item not found in cart');
+    }
+
+    return this.getMyCart(userId);
+  }
+
+  async mergeCarts(userId: number, guestItems: any[]) {
+    if (!guestItems || guestItems.length === 0) {
+      return this.getMyCart(userId);
+    }
+
+    let cart = await this.cartRepo.findOne({ where: { user: { id: userId } } });
+
+    if (!cart) {
+      const newcart = await this.cartRepo.create({ user: { id: userId } });
+      cart = await this.cartRepo.save(newcart);
+    }
+
+    for (const guestItem of guestItems) {
+      const existingItem = await this.cartItemsRepo.findOne({
+        where: {
+          cart: { id: cart?.id },
+          product: { id: guestItem.id },
+        },
+      });
+      const product = await this.productRepo.findOne({
+        where: { id: guestItem.id },
+      });
+
+      if (!product) {
+        throw new NotFoundException('Product not found');
+      }
+      const variant = await this.productVariantRepo.findOne({
+        where: { id: guestItem.variantId },
+      });
+      if (!variant) {
+        throw new NotFoundException('Product variant not found');
+      }
+      if (product)
+        if (existingItem) {
+          existingItem.quantity += guestItem.quantity;
+
+          variant.stock -= guestItem.quantity;
+          await this.productVariantRepo.save(variant);
+          await this.cartItemsRepo.save(existingItem);
+        } else {
+          // Create new entry
+          if (variant.stock < guestItem.quantity) {
+            guestItem.quantity = variant.stock;
+            variant.stock = 0;
+          } else {
+            variant.stock -= guestItem.quantity;
+          }
+          await this.productVariantRepo.save(variant);
+          const newItem = this.cartItemsRepo.create({
+            cart: { id: cart?.id },
+            product: { id: guestItem.id },
+            quantity: guestItem.quantity,
+            variant: { id: guestItem.variantId },
+          });
+          await this.cartItemsRepo.save(newItem);
+        }
+    }
+
+    return this.getMyCart(userId);
+  }
+
+  async removeCoupon(userId: number) {
+    const cart = await this.cartRepo.findOne({
+      where: { user: { id: userId } },
+      relations: ['cartItems', 'cartItems.product', 'coupon', 'cartItems.variant'],
+    });
+
+    if (!cart) {
+      throw new NotFoundException('Cart not found');
+    }
+
+    cart.coupon = null;
+    cart.discount = 0;
+
+    const subTotal = cart.cartItems.reduce((sum, item) => {
+      return sum + item.variant.price * item.quantity;
+    }, 0);
+    cart.totalAmount = subTotal;
+    cart.discountedAmount = subTotal;
+
+    await this.cartRepo.save(cart);
+
+    return this.getMyCart(userId);
+  }
+
+  async clearCart(userId: number) {
+    await this.cartRepo.delete({ user: { id: userId } });
+    return { message: 'Cart cleared successfully', success: true };
+  }
+}

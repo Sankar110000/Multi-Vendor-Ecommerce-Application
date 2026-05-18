@@ -1,0 +1,33 @@
+import { Module } from '@nestjs/common';
+import { VendorController } from './vendor.controller';
+import { VendorService } from './vendor.service';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { BullModule } from '@nestjs/bull';
+import { User } from 'src/users/users.entity';
+import { Product } from 'src/product/product.entity';
+import { ProductModule } from 'src/product/product.module';
+import { ProductService } from 'src/product/product.service';
+import { CloudinaryModule } from 'src/upload/upload.module';
+import { MailModule } from 'src/mail/mail.module';
+import { Order } from 'src/payment/order.entity';
+import { Vendor } from './vendor.entity';
+import { CouponModule } from 'src/coupon/coupon.module';
+import { Withdraw } from 'src/withdraw/withdraw.entity';
+import { VendorTransaction } from './vendorTransaction.entity';
+import { Tag } from 'src/product/tag.entity';
+import { ProductVariant } from 'src/product/productVariant.entity';
+
+@Module({
+  imports: [
+    TypeOrmModule.forFeature([User, Product, Order, Vendor, Withdraw, VendorTransaction, Tag, ProductVariant]),
+    BullModule.registerQueue({ name: 'image-upload' }),
+    ProductModule,
+    CloudinaryModule,
+    MailModule,
+    CouponModule,
+  ], 
+  controllers: [VendorController],
+  providers: [VendorService]
+})
+export class VendorModule {}
+
