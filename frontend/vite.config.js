@@ -14,6 +14,7 @@ export default defineConfig(({ mode }) => {
       environment: "jsdom",
     },
     server: {
+      host: '0.0.0.0',
       port: parseInt(env.VITE_PORT) || 5000,
     },
   };

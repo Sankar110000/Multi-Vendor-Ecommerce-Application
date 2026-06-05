@@ -138,10 +138,17 @@ Open the app at the URL printed by the Vite server (typically http://localhost:5
 
 ## Docker / Services
 
-Run Redis (used by backend for caching or queues):
+# Run Backend Container
 
 ```bash
-docker run -d --name my-redis -p 6379:6379 redis:latest
+cd backend
+docker compose up
+```
+# Run Frontend Container
+
+```bash
+cd frontend
+docker compose up 
 ```
 ### Start Ngork (For making payments)
 ```
