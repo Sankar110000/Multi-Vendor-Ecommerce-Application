@@ -261,7 +261,6 @@ function Products() {
                           {item.name}
                         </h3>
                         <p className="text-[#4379EE] font-bold flex items-center">
-                          <FaIndianRupeeSign />
                           {getProductPriceRange(item)}
                         </p>
                       </div>

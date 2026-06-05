@@ -1,0 +1,48 @@
+services:
+  backend:
+    build: .
+    ports:
+      - "8000:8000"
+    depends_on:
+      - redis
+      - database
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_URL=redis://redis:6379
+      - DB_HOST=database
+      - DB_NAME=test_db
+      - DB_PASS=postgres
+      - DB_USERNAME=postgres
+      - RAZORPAY_TEST_APIKEY=rzp_test_Sae6YTh6uYqdpV
+      - RAZORPAY_TEST_APISECRET=QDkAWmXhGQdEbA9Iy4Nv0T4f
+      - RAZORPAY_WEBHOOK_SECRET=supersecretstring
+      - RAZORPAY_PAYOUT_TEST_APIKEY=rzp_test_SbNPI4Xc0emkLD
+      - RAZORPAY_PAYOUT_TEST_APISECRET=VeQEw16Ya3K6eewSkWuCdJOD
+      - FRONTEND_URL=http://localhost:2000
+      - ADMIN_EMAIL=admin@gmail.com
+      - ADMIN_PASSWORD=admin@123
+
+    networks:
+      - newnetwork
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+    networks:
+      - newnetwork
+
+  database:
+    image: postgres:16
+    restart: always
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=test_db
+    networks:
+      - newnetwork
+
+networks:
+  newnetwork:
+    external: true

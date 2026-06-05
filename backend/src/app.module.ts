@@ -39,7 +39,7 @@ import { Tag } from './product/tag.entity';
 import { ReviewModule } from './review/review.module';
 import { Review } from './review/review.entity';
 import { AiModule } from './ai/ai.module';
-console.log('MIGRATION_PATH_CHECK:', join(__dirname, 'db/migrations', '*.ts'));
+console.log(process.env.REDIS_URL);
 @Module({
   imports: [
     ConfigModule.forRoot(),
@@ -64,7 +64,7 @@ console.log('MIGRATION_PATH_CHECK:', join(__dirname, 'db/migrations', '*.ts'));
         },
       },
     }),
-    BullModule.forRoot({ redis: { host: 'localhost', port: 6379 } }),
+    BullModule.forRoot({ redis: { host: process.env.REDIS_HOST, port: 6379 } }),
     BullModule.registerQueue({ name: 'user' }),
     JwtModule.register({
       global: true,
@@ -75,7 +75,7 @@ console.log('MIGRATION_PATH_CHECK:', join(__dirname, 'db/migrations', '*.ts'));
       useFactory: async () => ({
         isGlobal: true,
         store: await redisStore({
-          url: 'redis://localhost:6379',
+          url: process.env.REDIS_URL,
           ttl: 60000,
         }),
       }),
@@ -83,7 +83,7 @@ console.log('MIGRATION_PATH_CHECK:', join(__dirname, 'db/migrations', '*.ts'));
     TypeOrmModule.forFeature([User, ApiLog, Product, Cart, Order, Tag, Review]),
     TypeOrmModule.forRoot({
       type: 'postgres',
-      host: 'localhost',
+      host: process.env.DB_HOST,
       port: 5432,
       username: process.env.DB_USERNAME,
       password: process.env.DB_PASS,
