@@ -7,20 +7,17 @@ services:
       - redis
       - database
     environment:
-      - REDIS_HOST=redis
-      - REDIS_URL=redis://redis:6379
-      - DB_HOST=database
-      - DB_NAME=test_db
-      - DB_PASS=postgres
-      - DB_USERNAME=postgres
-      - RAZORPAY_TEST_APIKEY=rzp_test_Sae6YTh6uYqdpV
-      - RAZORPAY_TEST_APISECRET=QDkAWmXhGQdEbA9Iy4Nv0T4f
-      - RAZORPAY_WEBHOOK_SECRET=supersecretstring
-      - RAZORPAY_PAYOUT_TEST_APIKEY=rzp_test_SbNPI4Xc0emkLD
-      - RAZORPAY_PAYOUT_TEST_APISECRET=VeQEw16Ya3K6eewSkWuCdJOD
-      - FRONTEND_URL=http://localhost:2000
-      - ADMIN_EMAIL=admin@gmail.com
-      - ADMIN_PASSWORD=admin@123
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_URL=${REDIS_URL}
+      - DB_HOST=${DB_HOST}
+      - DB_NAME=${DB_NAME}
+      - DB_PASS=${DB_PASS}
+      - DB_USERNAME=${DB_USERNAME}
+      - FRONTEND_URL=${FRONTEND_URL}
+      - ADMIN_EMAIL=${ADMIN_EMAIL}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - JWT_SECRET=${JWT_SECRET}
+      - GROQ_API_KEY=${GROQ_API_KEY}
 
     networks:
       - newnetwork
